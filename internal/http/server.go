@@ -51,6 +51,7 @@ func NewServer(config *Config, registerRoutes func(r *chi.Mux), log *slog.Logger
 }
 
 func (s *Server) Start() error {
+	s.log.Info("Listening on 'http://" + s.config.Bind + "'")
 	err := s.server.ListenAndServe()
 	if !errors.Is(err, http.ErrServerClosed) {
 		return err
