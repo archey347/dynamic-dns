@@ -7,6 +7,7 @@ import (
 	"time"
 
 	nethttp "net/http"
+	"net/netip"
 
 	"github.com/archey347/dynamic-dns/dynamic-dns/internal/http"
 	"github.com/coreos/go-systemd/daemon"
@@ -71,11 +72,24 @@ func GetRouteRegistrar(ci *Container) func(r *chi.Mux) {
 }
 
 func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
-	remoteAddr := r.RemoteAddr
 	zone := chi.URLParam(r, "zone")
 	host := chi.URLParam(r, "host")
-	log := ci.log.With("zone", zone).With("host", host).With("remote_addr", remoteAddr)
+	log := ci.log.With("zone", zone).With("host", host).With("remote_addr", r.RemoteAddr)
 	log.Info("Recieved request")
+
+	remoteAddrPort, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		http.WriteErrorResponse(w, 400, "Remote address isn't valid")
+		slog.Info("Failed to parse remote address")
+		return
+	}
+
+	remoteAddr := remoteAddrPort.Addr()
+
+	recordType := "A"
+	if remoteAddr.Is6() {
+		recordType = "AAAA"
+	}
 
 	// Ask for credentials
 	username, password, ok := r.BasicAuth()
@@ -90,15 +104,21 @@ func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
 	// Check username is valid
 	var key *Key
 	if key, ok = ci.config.Keys[username]; !ok {
-		http.WriteErrorResponse(w, 400, "Invalid credentials")
+		http.WriteErrorResponse(w, 401, "Unauthorized")
 		log.Info("Incorrect username")
 		return
 	}
 
 	// Check password
 	if password != key.Secret {
-		http.WriteErrorResponse(w, 400, "Invalid credentials")
+		http.WriteErrorResponse(w, 401, "Unauthorized")
 		log.Info("Incorrect password")
+		return
+	}
+
+	if !isAuthorised(key, zone, host, recordType) {
+		http.WriteErrorResponse(w, nethttp.StatusUnauthorized, "Unauthorized")
+		log.Info("Key not authorized for zone/host")
 		return
 	}
 
@@ -106,4 +126,31 @@ func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
 		"zone": zone,
 		"host": host,
 	})
+}
+
+func isAuthorised(key *Key, zone string, host string, recordType string) bool {
+	// Check this user is allowed to update this zone
+	for _, allowed := range key.Allowed {
+		if allowed.Zone != zone {
+			continue
+		}
+
+		// Check host
+		for _, hostPattern := range allowed.HostPatterns {
+			if hostPattern != host {
+				continue
+			}
+
+			// Now check record types
+			for _, allowedRecordType := range allowed.RecordTypes {
+				if allowedRecordType != recordType {
+					continue
+				}
+
+				return true
+			}
+		}
+	}
+
+	return false
 }
