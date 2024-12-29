@@ -1,24 +1,38 @@
 package internal
 
 import (
+	"errors"
+
 	"github.com/archey347/dynamic-dns/dynamic-dns/internal/http"
 	"github.com/spf13/viper"
 )
 
+var AllowedRecordTypes = map[string]bool{
+	"A":    true,
+	"AAAA": true,
+}
+
 type Config struct {
-	Http    http.Config       `mapstructure:"http"`
-	Keys    map[string]string `mapstructure:"keys"`
-	Zones   []Zone            `mapstructure:"zones"`
-	Updates []Update          `mapstructure:"updates"`
+	Http        http.Config            `mapstructure:"http"`
+	Keys        map[string]*Key        `mapstructure:"keys"`
+	Zones       map[string]*Zone       `mapstructure:"zones"`
+	Nameservers map[string]*Nameserver `mapstructure:"nameservers"`
+}
+
+type Key struct {
+	Secret  string `mapstructure:"secret"`
+	Allowed []struct {
+		Zone         string   `mapstructure:"zone"`
+		HostPatterns []string `mapstructure:"host_patterns"`
+		RecordTypes  []string `mapstructure:"record_types"`
+	} `mapstructure:"allowed"`
 }
 
 type Zone struct {
-	Name    string   `mapstructure:"name"`
-	Pattern string   `mapstructure:"pattern"`
-	Keys    []string `mapstructure:"keys"`
+	Nameservers []string `mapstructure:"nameservers"`
 }
 
-type Update struct {
+type Nameserver struct {
 	Address string `mapstructure:"address"`
 	Secret  string `mapstructure:"secret"`
 }
@@ -30,20 +44,38 @@ func LoadConfig(configFile string) (*Config, error) {
 		configFile = defaultConfigFile
 	}
 
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(configFile)
+	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v.SetConfigType("yaml")
+	v.SetConfigFile(configFile)
 
-	err := viper.ReadInConfig()
+	err := v.ReadInConfig()
 	if err != nil {
 		return nil, err
 	}
 
 	config := &Config{}
 
-	err = viper.Unmarshal(&config)
+	err = v.Unmarshal(&config)
+	if err != nil {
+		return nil, err
+	}
+
+	err = validateConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
 	return config, nil
+}
+
+func validateConfig(config *Config) error {
+	for zoneName, zone := range config.Zones {
+		for _, ns := range zone.Nameservers {
+			if _, ok := config.Nameservers[ns]; !ok {
+				return errors.New("Unknown nameserver '" + ns + "' configured for zone '" + zoneName + "'")
+			}
+		}
+	}
+
+	return nil
 }

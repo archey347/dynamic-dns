@@ -2,11 +2,24 @@ http:
   bind: 127.0.0.1:8080
   timeout: 30
 keys:
-- main: noluckcatchingthemswansthen
+  host1: 
+    secret: noluckcatchingthemswansthen
+    allowed:
+    - zone: dyn.example.com
+      host_patterns: [ host1 ]
+      record_types: [ A, AAAA ]
+  host2: 
+    secret: justtheoneswanactually
+    allowed:
+    - zone: dyn.example.com
+      host_patterns: [ host1 ]
+      record_types: [ A, AAAA ]  
+  
 zones:
-- name: Example
-  pattern: host.example.com 
-  keys: [ main ]
-updates:
-- address: ns1.example.com
-  secret: justtheoneswanactually
+  dyn.example.com:
+    nameservers: [ main ]
+
+nameservers:
+  main:
+    address: ns1.example.com
+    secret: forthegreatergood
