@@ -35,8 +35,8 @@ type Zone struct {
 type Nameserver struct {
 	Address string `mapstructure:"address"`
 	Key     struct {
-		Name  string `mapstructure:"name"`
-		Value string `mapstructure:"value"`
+		Name   string `mapstructure:"name"`
+		Secret string `mapstructure:"secret"`
 	} `mapstructure:"key"`
 }
 
