@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	nethttp "net/http"
@@ -172,16 +173,27 @@ func isAuthorised(key *Key, zone string, host string, recordType string) bool {
 }
 
 func update(ns *Nameserver, zone string, host string, recordType string, value netip.Addr) error {
-	if zone[len(zone)-1:] != "." {
+	if zone == "" || zone[len(zone)-1] != '.' {
 		zone = zone + "."
 	}
 
 	fqdn := host + "." + zone
 
-	rr := new(dns.TXT)
-	rr.Hdr = dns.RR_Header{Name: fqdn, Rrtype: dns.StringToType[recordType], Class: dns.ClassINET, Ttl: uint32(3600)}
-	rr.Txt = []string{value.String()}
-	rrs := []dns.RR{rr}
+	rrs := make([]dns.RR, 1)
+
+	if recordType == "A" {
+		rr := new(dns.A)
+		rr.Hdr = dns.RR_Header{Name: fqdn, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: uint32(3600)}
+		rr.A = net.ParseIP(value.String())
+
+		rrs[0] = rr
+	} else if recordType == "AAAA" {
+		rr := new(dns.AAAA)
+		rr.Hdr = dns.RR_Header{Name: fqdn, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: uint32(3600)}
+		rr.AAAA = net.ParseIP(value.String())
+
+		rrs[0] = rr
+	}
 
 	m := new(dns.Msg)
 	m.SetUpdate(zone)
@@ -190,10 +202,10 @@ func update(ns *Nameserver, zone string, host string, recordType string, value n
 	m.Insert(rrs)
 
 	// Setup client
-	c := &dns.Client{Timeout: 30}
+	c := &dns.Client{Timeout: time.Duration(30) * time.Second}
 
-	m.SetTsig(ns.Key.Name, "hmac-sha256", 300, time.Now().Unix())
-	c.TsigSecret = map[string]string{ns.Key.Name: ns.Key.Value}
+	m.SetTsig(ns.Key.Name, dns.HmacSHA512, 300, time.Now().Unix())
+	c.TsigSecret = map[string]string{ns.Key.Name: ns.Key.Secret}
 
 	// Send the query
 	reply, _, err := c.Exchange(m, ns.Address+":53")
