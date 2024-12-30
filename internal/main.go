@@ -11,7 +11,7 @@ import (
 	nethttp "net/http"
 	"net/netip"
 
-	"github.com/archey347/dynamic-dns/dynamic-dns/internal/http"
+	"github.com/archey347/dynamic-dns/internal/http"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/go-chi/chi"
 	"github.com/miekg/dns"

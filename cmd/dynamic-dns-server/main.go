@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/archey347/dynamic-dns/dynamic-dns/internal"
+	"github.com/archey347/dynamic-dns/internal"
 )
 
 func main() {

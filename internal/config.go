@@ -3,7 +3,7 @@ package internal
 import (
 	"errors"
 
-	"github.com/archey347/dynamic-dns/dynamic-dns/internal/http"
+	"github.com/archey347/dynamic-dns/internal/http"
 	"github.com/spf13/viper"
 )
 
