@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/archey347/dynamic-dns/dynamic-dns/internal/http"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/go-chi/chi"
+	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -122,6 +124,20 @@ func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
+	nameservers := ci.config.Zones[zone].Nameservers
+	for _, ns := range nameservers {
+		var nsConfig *Nameserver
+		if nsConfig, ok = ci.config.Nameservers[ns]; !ok {
+			log.Error("Failed to find nameserver", "nameserver", ns)
+			continue
+		}
+
+		err = update(nsConfig, zone, host, recordType, remoteAddr)
+		if err != nil {
+			log.Error("Failed to update dns", "ns", ns, "error", err.Error())
+		}
+	}
+
 	http.WriteDataResponse(w, map[string]string{
 		"zone": zone,
 		"host": host,
@@ -153,4 +169,40 @@ func isAuthorised(key *Key, zone string, host string, recordType string) bool {
 	}
 
 	return false
+}
+
+func update(ns *Nameserver, zone string, host string, recordType string, value netip.Addr) error {
+	if zone[len(zone)-1:] != "." {
+		zone = zone + "."
+	}
+
+	fqdn := host + "." + zone
+
+	rr := new(dns.TXT)
+	rr.Hdr = dns.RR_Header{Name: fqdn, Rrtype: dns.StringToType[recordType], Class: dns.ClassINET, Ttl: uint32(3600)}
+	rr.Txt = []string{value.String()}
+	rrs := []dns.RR{rr}
+
+	m := new(dns.Msg)
+	m.SetUpdate(zone)
+
+	m.RemoveRRset(rrs)
+	m.Insert(rrs)
+
+	// Setup client
+	c := &dns.Client{Timeout: 30}
+
+	m.SetTsig(ns.Key.Name, "hmac-sha256", 300, time.Now().Unix())
+	c.TsigSecret = map[string]string{ns.Key.Name: ns.Key.Value}
+
+	// Send the query
+	reply, _, err := c.Exchange(m, ns.Address+":53")
+	if err != nil {
+		return fmt.Errorf("DNS update failed: %w", err)
+	}
+	if reply != nil && reply.Rcode != dns.RcodeSuccess {
+		return fmt.Errorf("DNS update failed: server replied: %s", dns.RcodeToString[reply.Rcode])
+	}
+
+	return nil
 }

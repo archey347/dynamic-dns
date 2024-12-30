@@ -34,7 +34,10 @@ type Zone struct {
 
 type Nameserver struct {
 	Address string `mapstructure:"address"`
-	Secret  string `mapstructure:"secret"`
+	Key     struct {
+		Name  string `mapstructure:"name"`
+		Value string `mapstructure:"value"`
+	} `mapstructure:"key"`
 }
 
 const defaultConfigFile = "/etc/dynamic-dns/dynamic-dns-server.yaml"

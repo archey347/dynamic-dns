@@ -22,4 +22,6 @@ zones:
 nameservers:
   main:
     address: ns1.example.com
-    secret: forthegreatergood
+    key:
+      name: key. 
+      secret: forthegreatergood
