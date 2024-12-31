@@ -80,17 +80,22 @@ func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
 	log := ci.log.With("zone", zone).With("host", host).With("remote_addr", r.RemoteAddr)
 	log.Info("Recieved request")
 
-	remoteAddrPort, err := netip.ParseAddrPort(r.RemoteAddr)
+	ra, err := netip.ParseAddr(r.RemoteAddr)
 	if err != nil {
-		http.WriteErrorResponse(w, 400, "Remote address isn't valid")
-		slog.Info("Failed to parse remote address")
-		return
+		slog.Info("Failed to parse remote address, attempting addrPort", "error", err.Error())
+		// It might include a port
+		remoteAddrPort, err := netip.ParseAddrPort(r.RemoteAddr)
+		if err != nil {
+			http.WriteErrorResponse(w, 400, "Remote address isn't valid")
+			slog.Info("Failed to parse remote address", "error", err.Error())
+			return
+		}
+
+		ra = remoteAddrPort.Addr()
 	}
 
-	remoteAddr := remoteAddrPort.Addr()
-
 	recordType := "A"
-	if remoteAddr.Is6() {
+	if ra.Is6() {
 		recordType = "AAAA"
 	}
 
@@ -133,7 +138,7 @@ func (ci *Container) Handle(w nethttp.ResponseWriter, r *nethttp.Request) {
 			continue
 		}
 
-		err = update(nsConfig, zone, host, recordType, remoteAddr)
+		err = update(nsConfig, zone, host, recordType, ra)
 		if err != nil {
 			log.Error("Failed to update dns", "ns", ns, "error", err.Error())
 		}
