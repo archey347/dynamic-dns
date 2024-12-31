@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chi-middleware/proxy"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -27,6 +28,8 @@ func NewServer(config *Config, registerRoutes func(r *chi.Mux), log *slog.Logger
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+
+	r.Use(proxy.ForwardedHeaders())
 
 	rec := &Recoverer{log: log}
 	r.Use(rec.Recover)

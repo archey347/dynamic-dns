@@ -7,5 +7,5 @@ Has a similar kind of interface as the one at [Mythic Beasts](https://www.mythic
 ### Testing
 
 ```
-DYNAMIC_DNS_CONFIG=etc/dynamic-dns-server/dynamic-dns-server.yaml go run cmd/dynamic-dns-server/main.go
+DYNAMIC_DNS_CONFIG=etc/dynamic-dns/dynamic-dns-server.yaml go run cmd/dynamic-dns-server/main.go
 ```
