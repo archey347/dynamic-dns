@@ -4,11 +4,43 @@ on:
   push:
     tags:
       - "v*"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pick the release to build
+        id: release
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          fi
+          git checkout "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # The exact version tag is pushed only by its own release, so it stays the
+      # image that was released; rebuilds move only vX.Y and latest.
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/dynamic-dns
+          flavor: latest=false
+          tags: |
+            type=semver,pattern=v{{version}},value=${{ steps.release.outputs.tag }},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern=v{{major}}.{{minor}},value=${{ steps.release.outputs.tag }}
+            type=raw,value=latest
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -24,6 +56,9 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          context: .
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
-          tags: ${{ vars.DOCKERHUB_USERNAME }}/dynamic-dns:${{ github.ref_name }}, ${{ vars.DOCKERHUB_USERNAME }}/dynamic-dns:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
