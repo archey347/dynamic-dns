@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  # Rebuild the newest release weekly so base-image fixes reach the moving tags,
-  # which hosts follow with `podman auto-update`.
   schedule:
     - cron: "17 3 * * 1"
   workflow_dispatch:
