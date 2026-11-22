@@ -23,7 +23,7 @@ type Container struct {
 	log    *slog.Logger
 }
 
-func Start(config *Config, log *slog.Logger) error {
+func Start(ctx context.Context, config *Config, log *slog.Logger) error {
 	ci := &Container{
 		config: config,
 		log:    log,
@@ -31,7 +31,7 @@ func Start(config *Config, log *slog.Logger) error {
 
 	s := http.NewServer(&config.Http, GetRouteRegistrar(ci), log)
 
-	g, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		l := log.With("component", "watchdog")
@@ -48,9 +48,20 @@ func Start(config *Config, log *slog.Logger) error {
 		err := s.Start()
 		if err != nil {
 			l.Error("Failed to start", "error", err.Error())
+			return errors.New("Failed to start http server component")
 		}
 
-		return errors.New("Failed to start http server component")
+		return nil
+	})
+
+	g.Go(func() error {
+		<-ctx.Done()
+
+		// Lets in-flight updates finish, within the window before systemd/podman sends SIGKILL.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		return s.Shutdown(shutdownCtx)
 	})
 
 	return g.Wait()
